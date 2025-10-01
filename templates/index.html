@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lucky Draw Wheel - Real-time</title>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+body { display: flex; flex-direction: column; align-items: center; font-family: Arial; }
+#wheelContainer { position: relative; width: 500px; height: 500px; }
+#wheelCanvas { border-radius: 50%; background: #f8f8f8; }
+#spinButton {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    padding: 15px 25px; border-radius: 50%; border: none;
+    background: #ff3366; color: white; font-size: 18px; cursor: pointer;
+}
+h2 { margin-top: 20px; }
+</style>
+</head>
+<body>
+<h1>🎡 Lucky Draw Wheel</h1>
+<div id="wheelContainer">
+  <canvas id="wheelCanvas" width="500" height="500"></canvas>
+  <button id="spinButton">SPIN</button>
+</div>
+<h2 id="result"></h2>
+
+<script>
+const canvas = document.getElementById("wheelCanvas");
+const ctx = canvas.getContext("2d");
+const spinBtn = document.getElementById("spinButton");
+const radius = canvas.width/2;
+
+let available = [];
+let spinning = false;
+
+// Connect SocketIO
+const socket = io();
+
+// Fetch available members
+async function fetchAvailable() {
+    const resp = await fetch("/api/available");
+    const data = await resp.json();
+    available = data.available;
+    drawWheel();
+}
+
+// Draw numbers on wheel
+function drawWheel() {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    if(available.length===0){
+        ctx.fillStyle="#ccc"; ctx.font="24px Arial";
+        ctx.fillText("No members left!",150,250); return;
+    }
+    const num = available.length;
+    const angleStep = 2*Math.PI/num;
+    for(let i=0;i<num;i++){
+        ctx.beginPath();
+        ctx.moveTo(radius,radius);
+        ctx.arc(radius,radius,radius-10,i*angleStep,(i+1)*angleStep);
+        ctx.fillStyle = i%2===0?"#ffcc00":"#ff6600";
+        ctx.fill();
+        ctx.strokeStyle="#fff";
+        ctx.stroke();
+        ctx.save();
+        ctx.translate(radius,radius);
+        ctx.rotate(i*angleStep+angleStep/2);
+        ctx.textAlign="right";
+        ctx.fillStyle="#000";
+        ctx.font="20px Arial";
+        ctx.fillText(available[i].number,radius-20,5);
+        ctx.restore();
+    }
+}
+
+// Spin button click
+spinBtn.addEventListener("click", ()=>{
+    if(spinning || available.length===0) return;
+    socket.emit("spin_wheel");
+});
+
+// Socket events
+socket.on("spin_started", ()=>{
+    spinning = true;
+});
+
+socket.on("spin_result", data=>{
+    if(data.error){
+        document.getElementById("result").innerText=data.error;
+        spinning=false; return;
+    }
+    const winner = data.winner;
+    document.getElementById("result").innerText=`🎉 Winner: ${winner.number} - ${winner.name}`;
+    fetchAvailable();
+    spinning=false;
+});
+
+socket.on("wheel_reset", ()=>{
+    fetchAvailable();
+    document.getElementById("result").innerText="";
+});
+
+// Initial fetch
+fetchAvailable();
+</script>
+</body>
+</html>
