@@ -1,0 +1,6 @@
+*.db
+luckywheel.db
+venv/
+__pycache__/
+.env
+*.pyc
